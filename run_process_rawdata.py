@@ -14,9 +14,13 @@ from networkx import nx
 from networkx.algorithms import centrality
 
 # from titlecase import titlecase
-
-import os,time
+import sys,os,time
 from pprint import pprint
+
+# This is fix issues related to Scopus packing the whole reference list
+# into a single column
+# https://stackoverflow.com/a/15063941
+csv.field_size_limit(sys.maxsize)
 
 def unicode_csv_reader(utf8_data, dialect=csv.excel, **kwargs):
   csv_reader = csv.reader(utf8_data, dialect=dialect, **kwargs)
@@ -45,7 +49,10 @@ class ScopusParser:
     self.parse_author_fix_list(author_fix_list_file)
 
   def author_name(self, author):
+    # TODO Check the author name in a more intelligent way
+    # author_pattern = re.compile('.+, (\.| |\-)*.{1}\.')
     if len(author.strip()) > 35:
+      print('... author name rejected: ', author)
       return False
     return author
 
@@ -102,7 +109,7 @@ class ScopusParser:
           # MongoDB does not allow periods in key names
           article['cols'][col.replace('.','')] = row[cols[col]]
         # print row[col['Authors']]
-        print(row[cols[u'Authors']])
+        print('... authors column: ', row[cols[u'Authors']])
         raw_authors = row[cols[u'Authors']].split('.,')
         print(raw_authors)
         authors = list()
@@ -111,12 +118,13 @@ class ScopusParser:
             print(index, author)
             author = '%s.' % author
           authors.append(author.replace(',',''))
-        print(authors)
+        print('... revised list of authors: ', authors)
         # time.sleep(10)
         if row[0] == '[No author name available]':
           authors = []
         for author in authors:
-          article['authors'].append(self.harmonize_author_name(self.author_name(author.strip())))
+          if self.author_name(author.strip()):
+            article['authors'].append(self.harmonize_author_name(author.strip()))
         article['title'] = row[cols['Title']]
         print(row[cols['Title']])
         print(article['authors'])
@@ -257,6 +265,8 @@ if __name__ == '__main__':
     print('Processing sample %s' % sample['nameseed'])
     df = pd.read_csv(sample['file'])
     print(df.head())
+    import time
+    time.sleep(5)
     # Let's hope that charsets issues are less likely to occur in Python3
     articlelist = open(sample['file'], 'rU')
     args = argparser.parse_args()
